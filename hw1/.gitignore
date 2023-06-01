@@ -1,0 +1,5 @@
+.vscode/
+*.o
+types/*.o
+*.log
+npshell
