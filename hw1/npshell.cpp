@@ -3,60 +3,55 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
-// #include <map>
 #include <string>
 #include <vector>
 
-// #include <stdio.h>
-// #include <stdlib.h>
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
-// #include "types/cmd.hpp"
-// #include "types/proc.hpp"
+#define MAX_CMD_ARG 32    // max number of argument of a single command
+#define MAX_CMD_LEN 15000 // max length of a single command
 
-#define MAX_CMD_ARG 32
-#define MAX_CMD_LEN 15000
+#define STDIN_FD 0  // stdin FD
+#define STDOUT_FD 1 // stdout FD
+#define STDERR_FD 2 // stderr FD
 
-#define STDIN_FD 0
-#define STDOUT_FD 1
-#define STDERR_FD 2
+#define PIPE_READ 0  // pipe read-end
+#define PIPE_WRITE 1 // pipe write-end
 
-#define PIPE_READ 0
-#define PIPE_WRITE 1
-
-class Proc
+class Proc // process structure, recording process infos
 {
   public:
-    pid_t pid;
-    int readEnd;
-    int writeEnd;
+    pid_t pid;    // process ID
+    int readEnd;  // read-end FD
+    int writeEnd; // write-end FD
     Proc() = delete;
     Proc(pid_t _pid, int _readEnd, int _writeEnd) : pid(_pid), readEnd(_readEnd), writeEnd(_writeEnd)
     {
     }
 };
 
-class Cmd
+class Cmd // command structure, recording command infos
 {
   public:
-    std::vector<std::string> data;
-    int cnt;
-    char type;
+    std::vector<std::string> data; // command content
+    int cnt;                       // count (for number pipe)
+    char type;                     // type ('0' -> ordinary pipe, '|' and '!' -> number pipe)
     Cmd() = delete;
     Cmd(std::vector<std::string> _data, int _cnt, char _type) : data(_data), cnt(_cnt), type(_type)
     {
     }
 };
 
-class Numpipe
+class Numpipe // number pipe structure, recording number pipe infos
 {
   public:
-    int read;
-    int write;
-    int cnt;
+    int read;  // read-end FD
+    int write; // wirte-end FD
+    int cnt;   // count
+    Numpipe() = delete;
     Numpipe(int _read, int _write, int _cnt) : read(_read), write(_write), cnt(_cnt)
     {
     }
@@ -83,7 +78,6 @@ void npParse(std::vector<Cmd> &cmds, std::string &str)
                     (*(cmds.end() - 1)).cnt = std::stol(std::string(temp.begin() + 1, temp.end()));
                     (*(cmds.end() - 1)).type = *(temp.begin());
                 }
-                // (*(cmds.end() - 1)).type = *(temp.begin());
                 cmds.push_back({{}, 0, '0'});
             }
             else
@@ -94,7 +88,7 @@ void npParse(std::vector<Cmd> &cmds, std::string &str)
         begin = end + delim.size();
         end = str.find(delim, begin);
     }
-    if (begin < str.size())
+    if (begin < str.size()) // deal with the last substring
     {
         std::string temp = str.substr(begin);
         if (*(temp.begin()) == '|' || *(temp.begin()) == '!')
@@ -104,7 +98,6 @@ void npParse(std::vector<Cmd> &cmds, std::string &str)
                 (*(cmds.end() - 1)).cnt = stol(std::string(temp.begin() + 1, temp.end()));
                 (*(cmds.end() - 1)).type = *(temp.begin());
             }
-            // (*(cmds.end() - 1)).type = *(temp.begin());
         }
         else
         {
@@ -167,7 +160,7 @@ bool npWait(std::vector<Proc> &procs)
     bool waitFlag = false;
     for (std::size_t i = 0; i < procs.size(); i++)
     {
-        int opt = (procs[i].writeEnd == STDOUT_FD) ? 0 : WNOHANG;
+        int opt = (procs[i].writeEnd == STDOUT_FD) ? 0 : WNOHANG; // only wait for processes outputing to stdout
         pid_t wpid = waitpid(procs[i].pid, (int *)0, opt);
         if (wpid > 0)
         {
@@ -187,6 +180,7 @@ int main()
     // main loop
     while (true)
     {
+        // read input string
         std::cout << "% ";
         std::string str;
         if (!std::getline(std::cin, str))
@@ -198,14 +192,7 @@ int main()
         std::vector<Cmd> cmds;
         npParse(cmds, str);
 
-        // for (auto elem : cmds)
-        // {
-        //     std::cout << elem.cnt << " " << elem.type << " ";
-        //     for (auto j : elem.data)
-        //         std::cout << j << " ";
-        //     std::cout << std::endl;
-        // }
-
+        // decrement number pipe list count
         for (auto &numpipe : numpipeList)
             numpipe.cnt--;
 
@@ -231,20 +218,21 @@ int main()
 
         for (std::size_t i = 0; i < cmds.size(); i++)
         {
-            bool isFirst = (i == 0);
-            bool isLast = (i == cmds.size() - 1);
-            bool isFile = (std::find(cmds[i].data.begin(), cmds[i].data.end(), ">") != cmds[i].data.end());
-            bool isNumPipe1 = (cmds[i].type == '|');
-            bool isNumPipe2 = (cmds[i].type == '!');
-            bool isNumPipe = isNumPipe1 || isNumPipe2;
-            bool isOrdPipe = !isNumPipe;
-            bool isPipe;
+            // bool isFirst = (i == 0); // not used                                                         // is first command
+            bool isLast = (i == cmds.size() - 1);                                                           // is last command
+            bool isFile = (std::find(cmds[i].data.begin(), cmds[i].data.end(), ">") != cmds[i].data.end()); // is file redirection
+            bool isNumPipe1 = (cmds[i].type == '|');                                                        // is number pipe (type1)
+            bool isNumPipe2 = (cmds[i].type == '!');                                                        // is number pipe (type2)
+            bool isNumPipe = isNumPipe1 || isNumPipe2;                                                      // is number pipe
+            bool isOrdPipe = !isNumPipe;                                                                    // is ordinary pipe
+            bool isPipe;                                                                                    // is to create new pipe (call()) or not in this round
 
             bool isReadFromNumPipe = false;
             bool isWriteToNumPipe = false;
-            int readFromNumPipeWrite = -1;
-            int writeToNumPipeWrite = -1;
+            int readFromNumPipeWrite = -1; // write-end of the number pipe reading from
+            int writeToNumPipeWrite = -1;  // write-end of the number pipe writing to
 
+            // check if read from number pipe this round
             for (std::size_t j = 0; j < numpipeList.size(); j++)
             {
                 if (numpipeList[j].cnt <= 0)
@@ -257,6 +245,7 @@ int main()
                 }
             }
 
+            // check if the number pipe writing to already exists
             if (isNumPipe)
             {
                 for (std::size_t j = 0; j < numpipeList.size(); j++)
@@ -283,30 +272,19 @@ int main()
             while (true)
             {
                 pid_t pid = fork();
-                // error
-                if (pid == -1)
-                {
-                    while (npWait(procList))
-                        ;
-                }
-                // child process
-                else if (pid == 0)
+                if (pid == -1) // error
+                    npWait(procList);
+                else if (pid == 0) // child process
                 {
                     // dup prevRead to STDIN
                     npDup(prevRead, STDIN_FD);
-
-                    // close the prevRead,
-                    // note that if prevRead is same as STDIN, don't close
+                    // close the prevRead, note that if prevRead is same as STDIN, don't close
                     if (prevRead != STDIN_FD)
                         npClose(prevRead);
-
+                    // if is reading from number pipe, close the write-end of that number pipe
                     if (isReadFromNumPipe)
                         npClose(readFromNumPipeWrite);
-
-                    // close unused pipe read-end
-                    // if (isPipe)
-                    //     npClose(pipedes[PIPE_READ]);
-
+                    // if is file redirection
                     if (isFile)
                     {
                         int ffd;
@@ -317,16 +295,13 @@ int main()
                         npExec(std::vector<std::string>(cmds[i].data.begin(), cmds[i].data.end() - 2));
                         break; // never reach here
                     }
-
-                    // pipe() called in this round
+                    // if new pipe created this round
                     if (isPipe)
                     {
-                        // std::cout << "isPipe" << std::endl;
                         npDup(pipedes[PIPE_WRITE], STDOUT_FD);
                         if (isNumPipe2)
                             npDup(pipedes[PIPE_WRITE], STDERR_FD);
                         npClose(pipedes[PIPE_READ]);
-                        // close pipe write-end after dup()
                         npClose(pipedes[PIPE_WRITE]);
                     }
                     else if (isWriteToNumPipe)
@@ -344,28 +319,25 @@ int main()
                     npExec(cmds[i].data);
                     break; // never reach here
                 }
-                // parnet process
-                else
+                else // parnet process
                 {
+                    // if is reading from number pipe, close the write-end of that number pipe
                     if (isReadFromNumPipe)
                         npClose(readFromNumPipeWrite);
-
+                    // add new object to process list
                     Proc p(pid, prevRead, STDOUT_FD);
                     if (isPipe)
                         p.writeEnd = pipedes[PIPE_WRITE];
                     else if (isWriteToNumPipe)
                         p.writeEnd = writeToNumPipeWrite;
-
-                    // if (!(procList.insert(std::pair<pid_t, Proc>(pid, p))).second)
-                    //     std::cerr << "[ERROR] : cannot insert to procList." << std::endl;
                     procList.push_back(p);
-
-                    if (isNumPipe && !isWriteToNumPipe)
+                    // add new object to number pipe list
+                    if (isNumPipe && !isWriteToNumPipe) // condition : is number pipe + the number pipe writing to doesn't exist
                         numpipeList.push_back(Numpipe(pipedes[PIPE_READ], pipedes[PIPE_WRITE], cmds[i].cnt));
                     // if is not number pipe, close unused pipe write-end
                     if (isPipe && !isNumPipe)
                         npClose(pipedes[PIPE_WRITE]);
-
+                    // decrement number pipe list count
                     if (!isLast && isNumPipe)
                     {
                         for (auto &numpipe : numpipeList)
@@ -375,32 +347,14 @@ int main()
                     // if is number pipe, reset the read-end to STDIN
                     // otherwise, set to pip read-end
                     prevRead = (!isPipe && isNumPipe) ? STDIN_FD : pipedes[PIPE_READ];
-                    // std::cout << "prevRead = " << prevRead << std::endl;
                     break;
                 }
             }
         }
 
+        // deal with finishing child processes
         npWait(procList);
-        // for (std::size_t i = 0; i < procList.size(); i++)
-        // {
-        //     int opt = (procList[i].writeEnd == STDOUT_FD) ? 0 : WNOHANG;
-        //     pid_t wpid = waitpid(procList[i].pid, (int *)0, opt);
-        //     if (wpid > 0)
-        //     {
-        //         procList.erase(procList.begin() + i);
-        //         i--;
-        //     }
-        // }
     }
-    // std::vector<Cmd> v;
-    // npParse(v, "ls -l |2 ls | cat");
-    // for (auto elem : v)
-    // {
-    //     std::cout << elem.cnt << " " << elem.type << " ";
-    //     for (auto j : elem.data)
-    //         std::cout << j << " ";
-    //     std::cout << std::endl;
-    // }
+
     return 0;
 }
