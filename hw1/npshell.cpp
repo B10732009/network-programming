@@ -3,7 +3,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
-#include <map>
+// #include <map>
 #include <string>
 #include <vector>
 
@@ -62,7 +62,7 @@ class Numpipe
     }
 };
 
-std::map<pid_t, Proc> procMap;
+std::vector<Proc> procList;
 std::vector<Numpipe> numpipeList;
 
 void npParse(std::vector<Cmd> &cmds, std::string &str)
@@ -162,6 +162,23 @@ void npClose(int fd)
     //     std::cout << "close " << fd << std::endl;
 }
 
+bool npWait(std::vector<Proc> &procs)
+{
+    bool waitFlag = false;
+    for (std::size_t i = 0; i < procs.size(); i++)
+    {
+        int opt = (procs[i].writeEnd == STDOUT_FD) ? 0 : WNOHANG;
+        pid_t wpid = waitpid(procs[i].pid, (int *)0, opt);
+        if (wpid > 0)
+        {
+            procs.erase(procs.begin() + i);
+            waitFlag = true;
+            i--;
+        }
+    }
+    return waitFlag;
+}
+
 int main()
 {
     // initialize PATH
@@ -202,6 +219,11 @@ int main()
         {
             npPrintenv(cmds[0].data[1]);
             continue;
+        }
+        else if (cmds.size() == 1 && cmds[0].data.size() == 1 && cmds[0].data[0] == "exit")
+        {
+            npWait(procList);
+            npExit();
         }
 
         // read-end FD of last round, initially set to STDIN
@@ -264,7 +286,8 @@ int main()
                 // error
                 if (pid == -1)
                 {
-                    perror("[ERROR] fork : ");
+                    while (npWait(procList))
+                        ;
                 }
                 // child process
                 else if (pid == 0)
@@ -333,8 +356,9 @@ int main()
                     else if (isWriteToNumPipe)
                         p.writeEnd = writeToNumPipeWrite;
 
-                    if (!(procMap.insert(std::pair<pid_t, Proc>(pid, p))).second)
-                        std::cerr << "[ERROR] : cannot insert to procMap." << std::endl;
+                    // if (!(procList.insert(std::pair<pid_t, Proc>(pid, p))).second)
+                    //     std::cerr << "[ERROR] : cannot insert to procList." << std::endl;
+                    procList.push_back(p);
 
                     if (isNumPipe && !isWriteToNumPipe)
                         numpipeList.push_back(Numpipe(pipedes[PIPE_READ], pipedes[PIPE_WRITE], cmds[i].cnt));
@@ -357,11 +381,17 @@ int main()
             }
         }
 
-        for (auto proc : procMap)
-        {
-            int opt = (proc.second.writeEnd == STDOUT_FD) ? 0 : WNOHANG;
-            pid_t wpid = waitpid(proc.first, (int *)0, opt);
-        }
+        npWait(procList);
+        // for (std::size_t i = 0; i < procList.size(); i++)
+        // {
+        //     int opt = (procList[i].writeEnd == STDOUT_FD) ? 0 : WNOHANG;
+        //     pid_t wpid = waitpid(procList[i].pid, (int *)0, opt);
+        //     if (wpid > 0)
+        //     {
+        //         procList.erase(procList.begin() + i);
+        //         i--;
+        //     }
+        // }
     }
     // std::vector<Cmd> v;
     // npParse(v, "ls -l |2 ls | cat");
