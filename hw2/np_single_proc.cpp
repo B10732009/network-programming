@@ -1,4 +1,6 @@
+#include <algorithm>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -14,6 +16,7 @@
 #include "user.hpp"
 
 std::vector<User> userList;
+std::vector<User> *User::mUserListPtr = &userList;
 
 std::string getRead(int sock)
 {
@@ -65,6 +68,71 @@ void printLogoutMsg(int id)
     }
 }
 
+void who(int id)
+{
+    for (auto u : userList)
+    {
+        if (u.id() == id)
+        {
+            std::sort(userList.begin(), userList.end(), [](User u1, User u2) { return u1.id() < u2.id(); });
+            getWrite(u.sock(), "<ID>\t<nickname>\t<IP:port>\t<indicate me>\n");
+            for (auto v : userList)
+                getWrite(u.sock(), std::to_string(v.id()) + "\t" + v.name() + "\t" + v.addr() + ":" + std::to_string(v.port()) + ((v.id() == id) ? "\t<-me" : "") + "\n");
+        }
+    }
+}
+
+void tell(int fid, int tid, std::string msg)
+{
+    auto fit = userList.end();
+    auto tit = userList.end();
+    for (auto it = userList.begin(); it != userList.end(); it++)
+    {
+        if (it->id() == fid)
+            fit = it;
+        if (it->id() == tid)
+            tit = it;
+    }
+    if (tit != userList.end()) // receiver found
+        getWrite(tit->sock(), "*** " + fit->name() + " told you ***: " + msg + "\n");
+    else
+        getWrite(fit->sock(), "*** Error: user #" + std::to_string(tid) + " does not exist yet. ***\n");
+}
+
+void yell(int id, std::string msg)
+{
+    for (auto u : userList)
+    {
+        if (u.id() == id)
+        {
+            for (auto v : userList)
+                getWrite(v.sock(), "*** " + u.name() + " yelled ***: " + msg + "\n");
+        }
+    }
+}
+
+void name(int id, std::string name)
+{
+    // check if the new name already exists
+    for (auto u : userList)
+    {
+        if (u.id() == id)
+        {
+            for (auto v : userList)
+            {
+                if (v.name() == name)
+                    getWrite(u.sock(), "*** User '" + name + "' already exists. ***\n");
+            }
+        }
+    }
+    // update new name
+    for (auto &u : userList)
+    {
+        if (u.id() == id)
+            u.setName(name);
+    }
+}
+
 int main(int argc, char *argv[], char *envp[])
 {
     if (argc != 2)
@@ -108,9 +176,22 @@ int main(int argc, char *argv[], char *envp[])
                     if (dup2(userList[i].sock(), 2) < 0)
                         perror("[ERROR] dup stderr :");
 
-                    if (userList[i].run(cmd)) // contiune
-                        getWrite(userList[i].sock(), "% ");
-                    else // logout
+                    if (cmd.substr(0, 3) == "who")
+                        who(userList[i].id());
+                    else if (cmd.substr(0, 4) == "tell")
+                    {
+                        std::stringstream ss;
+                        std::string t, tid;
+                        ss << cmd;
+                        ss >> t >> tid;
+                        // std::cerr << t << " " << tid << std::endl;
+                        tell(userList[i].id(), std::stoi(tid), cmd.substr(6 + tid.size()));
+                    }
+                    else if (cmd.substr(0, 4) == "yell")
+                        yell(userList[i].id(), cmd.substr(5));
+                    else if (cmd.substr(0, 4) == "name")
+                        name(userList[i].id(), cmd.substr(5));
+                    else if (!userList[i].run(cmd)) // logout
                     {
                         printLogoutMsg(userList[i].id());
                         if (dup2(0, 1) < 0)
@@ -123,6 +204,8 @@ int main(int argc, char *argv[], char *envp[])
                         userList.erase(userList.begin() + i);
                         break;
                     }
+                    getWrite(userList[i].sock(), "% ");
+                    break;
                 }
             }
         }

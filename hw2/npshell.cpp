@@ -315,12 +315,10 @@ void NpShell::npWrite(int fd, std::string str)
 
 NpShell::NpShell(int _sock) : sock(_sock)
 {
-    // initialize PATH
     npSetenv("PATH", "bin:.");
 }
 
 NpShell::~NpShell()
 {
     npWait(procList);
-    std::cerr << "~npshell called." << std::endl;
 }
