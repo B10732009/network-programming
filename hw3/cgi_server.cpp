@@ -1,144 +1,158 @@
-// c
+#include <algorithm>
+#include <cstdlib>
+#include <fstream>
+#include <iostream>
+#include <memory>
+#include <sstream>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include <stdio.h>
 #include <string.h>
 
-// c++
-#include <iostream>
-#include <fstream>
-#include <string>
-#include <vector>
-#include <sstream>
-#include <cstdlib>
-#include <memory>
-#include <utility>
-#include <boost/asio.hpp>
+// #include <boost/asio.hpp>
 
-using namespace std;
 using boost::asio::ip::tcp;
 
-class Host{
-public:
-    string hostname;
-    string port;
-    string filename;
-    string id;
-    Host(string _hostname, string _port, string _filename, string _id):
-        hostname(_hostname), port(_port), filename(_filename), id(_id){
+#define MAX_LEN 15000
+
+class Host
+{
+  public:
+    std::string hostname;
+    std::string port;
+    std::string filename;
+    std::string id;
+    Host(std::string _hostname, std::string _port, std::string _filename, std::string _id) : hostname(_hostname), port(_port), filename(_filename), id(_id)
+    {
     }
 };
 
-class Client: public std::enable_shared_from_this<Client>{
-private:
-    enum { max_length = 15000 };
-    char rdata_[max_length];
-    char wdata_[max_length];
-    string sdata_;
+class Client : public std::enable_shared_from_this<Client>
+{
+  private:
+    char rdata_[MAX_LEN];
+    char wdata_[MAX_LEN];
+    std::string sdata_;
     tcp::socket socket_;
     tcp::resolver resolver_;
     tcp::resolver::query query_;
-    Host host_;
-    tcp::socket* ssocket_ptr_;
-    vector<string> fileline_;
+    tcp::socket *ssocket_ptr_;
 
-public:
-    Client(boost::asio::io_context& io_context_, tcp::resolver::query query_, Host host_, tcp::socket* ssocket_ptr_):
-            socket_(io_context_), resolver_(io_context_), query_(move(query_)), host_(host_), ssocket_ptr_(ssocket_ptr_){
+    Host host_;
+    std::vector<std::string> fileline_;
+
+  public:
+    Client(boost::asio::io_context &io_context_, tcp::resolver::query query_, Host host_, tcp::socket *ssocket_ptr_)
+        : socket_(io_context_), resolver_(io_context_), query_(move(query_)), host_(host_), ssocket_ptr_(ssocket_ptr_)
+    {
     }
 
-    void start(){
-        fileline_ = readfile("test_case/"+host_.filename);
+    void start()
+    {
+        fileline_ = readfile("test_case/" + host_.filename);
         do_resolve();
     }
 
-    void do_resolve(){
+    void do_resolve()
+    {
         auto self(shared_from_this());
-        resolver_.async_resolve(query_, 
-            [this, self](boost::system::error_code ec, tcp::resolver::iterator iter){
-                if(!ec){
-                    auto self(shared_from_this());
-                    socket_.async_connect(*iter,
-                        [this, self](boost::system::error_code ec){
-                            if(!ec){
-                                do_read();
-                            }
-                        }
-                    );
-                }
-            }
-        );
-    }
-
-    void do_read(){ // client reads from npshell 
-        auto self(shared_from_this());
-        socket_.async_read_some(boost::asio::buffer(rdata_, sizeof(rdata_)),
-            [this, self](boost::system::error_code ec, std::size_t length){
-                if (!ec){
-                    string srdata_(rdata_);
-                    sdata_ += srdata_;
-                    memset(rdata_, 0, sizeof(rdata_));
-                    if(find(srdata_.begin(), srdata_.end(), '%')==srdata_.end()){ // not found '%'
+        resolver_.async_resolve(query_, [this, self](boost::system::error_code ec, tcp::resolver::iterator iter) {
+            if (!ec)
+            {
+                auto self(shared_from_this());
+                socket_.async_connect(*iter, [this, self](boost::system::error_code ec) {
+                    if (!ec)
+                    {
                         do_read();
                     }
-                    else{ // found '%'
-                        do_write_browser(html_insertion(host_.id, replace_html_escape(sdata_), false));
-                        fflush(stdout);
-                        sdata_ = "";
-
-                        string swdata_ = "";
-                        if(!fileline_.empty()){
-                            strcpy(wdata_, ((*(fileline_.begin()))+"\r\n").c_str());
-                            do_write_browser(html_insertion(host_.id, replace_html_escape((*(fileline_.begin()))+"\n"), true));
-                            fflush(stdout);
-                            fileline_.erase(fileline_.begin());
-                        }
-                        do_write();
-                    }
-                }
+                });
             }
-        );
+        });
     }
 
-    void do_write(){ // client writes to npshell
+    void do_read() // client reads from npshell
+    {
         auto self(shared_from_this());
-        boost::asio::async_write(socket_, boost::asio::buffer(wdata_, strlen(wdata_)),
-            [this, self](boost::system::error_code ec, std::size_t){
-                if (!ec){
-                    memset(wdata_, 0, sizeof(wdata_));
+        socket_.async_read_some(boost::asio::buffer(rdata_, sizeof(rdata_)), [this, self](boost::system::error_code ec, std::size_t length) {
+            if (!ec)
+            {
+                std::string srdata_(rdata_);
+                sdata_ += srdata_;
+                std::memset(rdata_, 0, sizeof(rdata_));
+                if (std::find(srdata_.begin(), srdata_.end(), '%') == srdata_.end()) // not found '%'
+                {
                     do_read();
                 }
+                else // found '%'
+                {
+                    do_write_browser(html_insertion(host_.id, replace_html_escape(sdata_), false));
+                    sdata_ = "";
+                    string swdata_ = "";
+                    if (!fileline_.empty())
+                    {
+                        std::strcpy(wdata_, ((*(fileline_.begin())) + "\r\n").c_str());
+                        do_write_browser(html_insertion(host_.id, replace_html_escape((*(fileline_.begin())) + "\n"), true));
+                        fileline_.erase(fileline_.begin());
+                    }
+                    do_write();
+                }
             }
-        );
+        });
     }
 
-    void do_write_browser(string str){ // client writes to browser
+    void do_write() // client writes to npshell
+    {
         auto self(shared_from_this());
-        for(int i = 0; i < (int)str.size(); i++){ // to check no invisible character in the string
-            if((int)str[i] < 32){
-                str.erase(str.begin()+i);
+        boost::asio::async_write(socket_, boost::asio::buffer(wdata_, std::strlen(wdata_)), [this, self](boost::system::error_code ec, std::size_t) {
+            if (!ec)
+            {
+                std::memset(wdata_, 0, sizeof(wdata_));
+                do_read();
+            }
+        });
+    }
+
+    void do_write_browser(string str) // client writes to browser
+    {
+        auto self(shared_from_this());
+
+        // check no invisible character in the string
+        for (std::size_t i = 0; i < str.size(); i++)
+        {
+            if (str[i] < 32)
+            {
+                str.erase(str.begin() + i);
                 i--;
             }
         }
-        boost::asio::async_write(*ssocket_ptr_, boost::asio::buffer(str.c_str(), str.size()),
-            [this, self](boost::system::error_code ec, std::size_t){
-                if (!ec){
-                }
+
+        boost::asio::async_write(*ssocket_ptr_, boost::asio::buffer(str.c_str(), str.size()), [this, self](boost::system::error_code ec, std::size_t) {
+            if (!ec)
+            {
             }
-        );
+        });
     }
 
-    static vector<string> readfile(string filename){
-        fstream fs;
+    static std::vector<std::string> readfile(std::string filename)
+    {
+        std::fstream fs;
         fs.open(filename, ios::in);
-        if(!fs.is_open()){
-            cerr<<"fs.open(): fail to open file."<<endl;
+        if (!fs.is_open())
+        {
+            std::cerr << "fs.open(): fail to open file." << std::endl;
             return {};
         }
-        vector<string> fileline;
-        string line;
-        while(getline(fs, line)){
-            for(int i = 0; i < (int)line.size(); i++){
-                if(line[i] < 32){
-                    line.erase(line.begin()+i);
+        std::vector<std::string> fileline;
+        std::string line;
+        while (std::getline(fs, line))
+        {
+            for (std::size_t i = 0; i < line.size(); i++)
+            {
+                if (line[i] < 32)
+                {
+                    line.erase(line.begin() + i);
                     i--;
                 }
             }
@@ -148,113 +162,113 @@ public:
         return fileline;
     }
 
-    static string html_insertion(string id, string content, bool is_cmd){
-        return string("<script>document.getElementById('") + id + "').innerHTML += '" +
-            (is_cmd ? "<b>" : "") + content + (is_cmd ? "</b>" : "") + "';</script>\n";
+    static std::string html_insertion(std::string id, std::string content, bool is_cmd)
+    {
+        return std::string("<script>document.getElementById('") + id + "').innerHTML += '" + (is_cmd ? "<b>" : "") + content + (is_cmd ? "</b>" : "") + "';</script>\n";
     }
 
-    static string replace_html_escape(string str){
-        string ret;
-        for(int i = 0; i < (int)str.size(); i++){
-            switch(str[i]){
-                case '&':
-                    ret += "&amp;";
-                    break;
-                case '\"':
-                    ret += "&quot;";
-                    break;
-                case '\'':
-                    ret += "&apos;";
-                    break;
-                case '<':
-                    ret += "&lt;";
-                    break;
-                case '>':
-                    ret += "&gt;";
-                    break;
-                case '\r':
-                    break;
-                case '\n':
-                    ret += "<br>";
-                    break;
-                default:
-                    if((int)str[i] >= 32){
-                        ret += str[i];
-                    }  
+    static std::string replace_html_escape(std::string str)
+    {
+        std::string ret;
+        for (std::size_t i = 0; i < str.size(); i++)
+        {
+            switch (str[i])
+            {
+            case '&':
+                ret += "&amp;";
+                break;
+            case '\"':
+                ret += "&quot;";
+                break;
+            case '\'':
+                ret += "&apos;";
+                break;
+            case '<':
+                ret += "&lt;";
+                break;
+            case '>':
+                ret += "&gt;";
+                break;
+            case '\r':
+                break;
+            case '\n':
+                ret += "<br>";
+                break;
+            default:
+                if ((int)str[i] >= 32)
+                    ret += str[i];
             }
         }
         return ret;
     }
 };
 
-class session: public std::enable_shared_from_this<session>{
-private:
+class Session : public std::enable_shared_from_this<Session>
+{
+  private:
     tcp::socket socket_;
-    enum { max_length = 1024 };
-    char rdata_[max_length];
+    char rdata_[MAX_LEN];
     char wdata_[4096];
 
-    string request_method;
-    string request_uri;
-    string query_string;
-    string server_protocol;
-    string http_host;
-    string server_addr;
-    string server_port;
-    string remote_addr;
-    string remote_port;
-    string cgi;
+    std::string request_method;
+    std::string request_uri;
+    std::string query_string;
+    std::string server_protocol;
+    std::string http_host;
+    std::string server_addr;
+    std::string server_port;
+    std::string remote_addr;
+    std::string remote_port;
+    std::string cgi;
     pid_t pid;
 
-    void print_request(){
-        cout << cgi << endl;
+    void print_request()
+    {
+        std::cout << cgi << std::endl;
     }
 
-    void do_read(){ // server reads from browser
+    void do_read() // server reads from browser
+    {
         auto self(shared_from_this());
-        socket_.async_read_some(boost::asio::buffer(rdata_, max_length),
-            [this, self](boost::system::error_code ec, std::size_t length){
-                if (!ec){
-                    stringstream ss;
-                    ss << string(rdata_);
-                    string dummy;
-                    ss >> request_method >> request_uri >> server_protocol >> dummy >> http_host;
-                    int loc;
-                    for(loc = 0; loc < (int)request_uri.size(); loc++){
-                        if(request_uri[loc] == '?'){
-                            break;
-                        }
-                    }
-                    cgi = (loc < (int)request_uri.size()) ? string(request_uri.begin()+1, request_uri.begin()+loc) : string(request_uri.begin()+1, request_uri.end());
-                    query_string = (loc < (int)request_uri.size()) ? string(request_uri.begin()+loc+1, request_uri.end()) : "";
-                    server_addr = socket_.local_endpoint().address().to_string();
-                    server_port = to_string(socket_.local_endpoint().port());
-                    remote_addr = socket_.remote_endpoint().address().to_string();
-                    remote_port = to_string(socket_.remote_endpoint().port());
-                    print_request();
+        socket_.async_read_some(boost::asio::buffer(rdata_, MAX_LEN), [this, self](boost::system::error_code ec, std::size_t length) {
+            if (!ec)
+            {
+                std::stringstream ss;
+                std::string dummy;
 
-                    if(cgi == "panel.cgi"){
-                        print_panel();
-                    }
-                    else if(cgi == "console.cgi"){
-                        print_console();
-                    }
-                }
+                ss << std::string(rdata_);
+                ss >> request_method >> request_uri >> server_protocol >> dummy >> http_host;
+                server_addr = socket_.local_endpoint().address().to_string();
+                server_port = std::to_string(socket_.local_endpoint().port());
+                remote_addr = socket_.remote_endpoint().address().to_string();
+                remote_port = std::to_string(socket_.remote_endpoint().port());
+
+                auto it = std::find(request_uri.begin(), request_uri.end(), '?');
+                cgi = (it == request_uri.end()) ? std::string(request_uri.begin() + 1, it) : request_uri;
+                query_string = (it == request_uri.end()) ? std::string(it + 1, request_uri.end()) : "";
+
+                print_request();
+
+                if (cgi == "panel.cgi")
+                    print_panel();
+                else if (cgi == "console.cgi")
+                    print_console();
             }
-        );
+        });
     }
 
-    void do_write(string str){ // server writes to browser
+    void do_write(std::string str) // server writes to browser
+    {
         auto self(shared_from_this());
-        boost::asio::async_write(socket_, boost::asio::buffer(str.c_str(), str.size()),
-            [this, self](boost::system::error_code ec, std::size_t){
-                if (!ec){
-                }
+        boost::asio::async_write(socket_, boost::asio::buffer(str.c_str(), str.size()), [this, self](boost::system::error_code ec, std::size_t) {
+            if (!ec)
+            {
             }
-        );
+        });
     }
 
-    void print_panel(){
+    void print_panel()
+    {
         do_write("HTTP/1.1 200 OK\r\n");
         do_write("Content-Type: text/html\r\n\r\n");
         do_write(R"""(
@@ -419,30 +433,34 @@ private:
         )""");
     }
 
-    vector<Host> parse(string query_string){
-        vector<string> temp = {""};
-        for(int i = 0; i < (int)query_string.size(); i++){
-            if(query_string[i] == '&')
+    std::vector<Host> parse(std::string query_string)
+    {
+        std::vector<std::string> temp = {""};
+        for (std::size_t i = 0; i < query_string.size(); i++)
+        {
+            if (query_string[i] == '&')
                 temp.push_back("");
             else
-                temp[temp.size()-1] += query_string[i];
+                temp[temp.size() - 1] += query_string[i];
         }
-        vector<Host> host_list;
-        for(int i = 0; i < (int)temp.size(); i += 3){
-            if((int)temp[i].size() > 3 && (int)temp[i+1].size() > 3 && (int)temp[i+2].size() > 3){
-                host_list.push_back(Host(
-                    string(temp[i].begin()+3, temp[i].end()),
-                    string(temp[i+1].begin()+3, temp[i+1].end()),
-                    string(temp[i+2].begin()+3, temp[i+2].end()),
-                    "s" + to_string(i)
-                ));
+        std::vector<Host> host_list;
+        for (std::size_t i = 0; i < temp.size(); i += 3)
+        {
+            if (temp[i].size() > 3 && temp[i + 1].size() > 3 && temp[i + 2].size() > 3)
+            {
+                host_list.push_back(Host(std::string(temp[i].begin() + 3, temp[i].end()),         // hostname
+                                         std::string(temp[i + 1].begin() + 3, temp[i + 1].end()), // port
+                                         std::string(temp[i + 2].begin() + 3, temp[i + 2].end()), // filename
+                                         "s" + std::to_string(i))                                 // id
+                );
             }
         }
         return host_list;
     }
 
-    void print_console(){
-        vector<Host> host_list = parse(query_string);
+    void print_console()
+    {
+        std::vector<Host> host_list = parse(query_string);
         do_write("HTTP/1.1 200 OK\r\n");
         do_write("Content-type: text/html\r\n\r\n");
         do_write(R"""(
@@ -496,52 +514,62 @@ private:
                 </body>
             </html>
         )""");
-        for(int i = 0; i < (int)host_list.size(); i++){
+        for (std::size_t i = 0; i < host_list.size(); i++)
+        {
             do_write(Client::html_insertion("s_title", "<th scope=\"col\">" + host_list[i].hostname + ":" + host_list[i].port + "</th>", false));
             do_write(Client::html_insertion("s_body", "<td><pre id=\"" + host_list[i].id + "\" class=\"mb-0\"></pre></td>", false));
         }
 
         boost::asio::io_context io_context;
-        for(int i = 0; i < (int)host_list.size(); i++){
+        for (std::size_t i = 0; i < host_list.size(); i++)
+        {
             tcp::resolver::query query(host_list[i].hostname, host_list[i].port);
             make_shared<Client>(io_context, move(query), host_list[i], &socket_)->start();
         }
 
         io_context.run();
     }
-    
-public:
-    session(tcp::socket socket): socket_(std::move(socket)){
+
+  public:
+    Session(tcp::socket socket) : socket_(std::move(socket))
+    {
     }
 
-    void start(){
+    void start()
+    {
         do_read();
     }
 };
 
-class server{
-private:
+class server
+{
+  private:
     tcp::acceptor acceptor_;
 
-    void do_accept(){
-        acceptor_.async_accept(
-            [this](boost::system::error_code ec, tcp::socket socket){
-            if (!ec){
-                std::make_shared<session>(std::move(socket))->start();
+    void do_accept()
+    {
+        acceptor_.async_accept([this](boost::system::error_code ec, tcp::socket socket) {
+            if (!ec)
+            {
+                std::make_shared<Session>(std::move(socket))->start();
             }
             do_accept();
-            });
+        });
     }
-public:
-    server(boost::asio::io_context& io_context, short port): acceptor_(io_context, tcp::endpoint(tcp::v4(), port)){
+
+  public:
+    server(boost::asio::io_context &io_context, short port) : acceptor_(io_context, tcp::endpoint(tcp::v4(), port))
+    {
         do_accept();
     }
 };
 
-int main(int argc, char* argv[])
+int main(int argc, char *argv[])
 {
-    try{
-        if (argc != 2){
+    try
+    {
+        if (argc != 2)
+        {
             std::cerr << "Usage: async_tcp_echo_server <port>\n";
             return 1;
         }
@@ -550,7 +578,8 @@ int main(int argc, char* argv[])
         server s(io_context, std::atoi(argv[1]));
         io_context.run();
     }
-    catch (std::exception& e){
+    catch (std::exception &e)
+    {
         std::cerr << "Exception: " << e.what() << "\n";
     }
 

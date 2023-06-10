@@ -1,5 +1,6 @@
-.o
+.vscode/
+*.o
+*.log
 http_server
 console.cgi
 cgi_server.exe
-/.vscode
