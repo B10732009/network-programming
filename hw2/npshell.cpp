@@ -22,7 +22,7 @@ Numpipe::Numpipe(int _read, int _write, int _cnt) : read(_read), write(_write), 
 {
 }
 
-void NpShell::npRun(std::string str)
+bool NpShell::npRun(std::string str)
 {
     // parse the input string
     std::vector<Cmd> cmds;
@@ -36,17 +36,18 @@ void NpShell::npRun(std::string str)
     if (cmds.size() == 1 && cmds[0].data.size() == 3 && cmds[0].data[0] == "setenv")
     {
         npSetenv(cmds[0].data[1], cmds[0].data[2]);
-        return;
+        return true;
     }
     else if (cmds.size() == 1 && cmds[0].data.size() == 2 && cmds[0].data[0] == "printenv")
     {
         npPrintenv(cmds[0].data[1]);
-        return;
+        return true;
     }
     else if (cmds.size() == 1 && cmds[0].data.size() == 1 && cmds[0].data[0] == "exit")
     {
         npWait(procList);
-        npExit();
+        // npExit();
+        return false;
     }
 
     // read-end FD of last round, initially set to STDIN
@@ -190,6 +191,7 @@ void NpShell::npRun(std::string str)
 
     // deal with finishing child processes
     npWait(procList);
+    return true;
 }
 
 void NpShell::npParse(std::vector<Cmd> &cmds, std::string str)
@@ -248,8 +250,8 @@ void NpShell::npPrintenv(std::string var)
 {
     char *env = getenv(var.c_str());
     if (env)
-        // std::cout << env << std::endl;
-        npWrite(sock, env);
+        std::cout << env << std::endl;
+    // npWrite(sock, env);
 }
 
 void NpShell::npExec(std::vector<std::string> cmds)
@@ -315,4 +317,10 @@ NpShell::NpShell(int _sock) : sock(_sock)
 {
     // initialize PATH
     npSetenv("PATH", "bin:.");
+}
+
+NpShell::~NpShell()
+{
+    npWait(procList);
+    std::cerr << "~npshell called." << std::endl;
 }

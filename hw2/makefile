@@ -3,7 +3,7 @@ CFLAGS = -O3 -Wall -std=c++17
 
 SRC1 = np_simple.cpp
 SRC2 = np_single_proc.cpp
-UTIL = npshell.cpp npsocket.cpp
+UTIL = npshell.cpp npsocket.cpp user.cpp
 
 OBJ1 = $(patsubst %.cpp, %.o, $(SRC1))
 OBJ2 = $(patsubst %.cpp, %.o, $(SRC2))
@@ -29,6 +29,9 @@ clean:
 	rm -f *.o $(TARGET1) $(TARGET2)
 
 $(TARGET1): $(OBJ1) $(OBJUTIL)
+	$(CC) $(CFLAGS) -o $@ $^
+
+$(TARGET2): $(OBJ2) $(OBJUTIL)
 	$(CC) $(CFLAGS) -o $@ $^
 
 %.o: %.cpp

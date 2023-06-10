@@ -1,4 +1,3 @@
-// c++
 #include <iostream>
 #include <string>
 #include <vector>
@@ -67,9 +66,10 @@ int main(int argc, char *argv[], char *envp[])
     NpSocket npsocket(std::stoi(std::string(argv[1])));
     while (true)
     {
-        int csock = npsocket.npAccept();
-        while (csock < 0)
-            csock = npsocket.npAccept();
+        int sock, port;
+        std::string addr;
+        while (npsocket.npAccept(sock, addr, port))
+            ;
 
         pid_t pid = fork();
         while (pid < 0)
@@ -80,14 +80,14 @@ int main(int argc, char *argv[], char *envp[])
 
         if (pid == 0) // child
         {
-            if (dup2(csock, 0) < 0)
+            if (dup2(sock, 0) < 0)
                 perror("[ERROR] dup stdin :");
-            if (dup2(csock, 1) < 0)
+            if (dup2(sock, 1) < 0)
                 perror("[ERROR] dup stdout :");
-            if (dup2(csock, 2) < 0)
+            if (dup2(sock, 2) < 0)
                 perror("[ERROR] dup stderr :");
 
-            NpShell npshell(csock);
+            NpShell npshell(sock);
             while (true)
             {
                 std::cout << "% " << std::flush; // use std::flush to force to print the string
@@ -106,13 +106,15 @@ int main(int argc, char *argv[], char *envp[])
                         i--;
                     }
                 }
-                npshell.npRun(cmd);
+                // run command
+                if (!npshell.npRun(cmd))
+                    exit(0);
             }
             exit(1);
         }
         else // parent
         {
-            if (close(csock) < 0)
+            if (close(sock) < 0)
                 perror("[ERROR] close :");
             if (waitpid(pid, (int *)0, 0) < 0)
                 perror("[ERROR] waitpid :");

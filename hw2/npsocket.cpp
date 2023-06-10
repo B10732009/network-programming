@@ -1,16 +1,16 @@
 #include "npsocket.hpp"
 
-NpSocket::NpSocket(int _port) : ssock(-1), csock(-1), sport(_port)
+NpSocket::NpSocket(int _port) : mSport(_port), mMaxsock(2)
 {
-    ssock = socket(AF_INET, SOCK_STREAM, 0);
-    if (ssock < 0)
+    mSsock = socket(AF_INET, SOCK_STREAM, 0);
+    if (mSsock < 0)
     {
         perror("[ERROR] socket :");
         return;
     }
 
     int optval = 1;
-    if (setsockopt(ssock, SOL_SOCKET, SO_REUSEADDR, &optval, (socklen_t)sizeof(optval)) < 0)
+    if (setsockopt(mSsock, SOL_SOCKET, SO_REUSEADDR, &optval, (socklen_t)sizeof(optval)) < 0)
     {
         perror("[ERROR] setsockopt :");
         return;
@@ -19,36 +19,85 @@ NpSocket::NpSocket(int _port) : ssock(-1), csock(-1), sport(_port)
     sockaddr_in ssaddr;
     ssaddr.sin_family = AF_INET;
     ssaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    ssaddr.sin_port = htons(sport);
+    ssaddr.sin_port = htons(mSport);
     std::memset(ssaddr.sin_zero, 0, sizeof(ssaddr.sin_zero));
 
-    if (bind(ssock, (const sockaddr *)(&ssaddr), sizeof(ssaddr)) < 0)
+    if (bind(mSsock, (const sockaddr *)(&ssaddr), sizeof(ssaddr)) < 0)
     {
         perror("[ERROR] bind :");
         return;
     }
 
-    if (listen(ssock, 32) < 0)
+    if (listen(mSsock, 32) < 0)
     {
         perror("[ERROR] listen :");
         return;
     }
+
+    npFdSet(mSsock);
+    mMaxsock = std::max(mSsock, mMaxsock);
 }
 
-int NpSocket::npAccept()
+bool NpSocket::npAccept(int &sock, std::string &addr, int &port)
 {
     sockaddr_in csaddr;
     socklen_t csaddrLen = sizeof(csaddr);
-    csock = accept(ssock, (sockaddr *)(&csaddr), &csaddrLen);
-    if (csock < 0)
+    sock = accept(mSsock, (sockaddr *)(&csaddr), &csaddrLen);
+    if (sock < 0)
     {
-        perror("[ERROR] accept :");
+        perror("[ERROR] npAccept :");
         return false;
     }
-    return csock;
+    addr = inet_ntoa(csaddr.sin_addr);
+    port = ntohs(csaddr.sin_port);
+    npFdSet(sock);
+    mMaxsock = std::max(mMaxsock, sock);
+    return true;
 }
 
-// int NpSocket::getClientSock()
-// {
-//     return csock;
-// }
+int NpSocket::npSelect(fd_set &tempSet)
+{
+    std::memcpy(&tempSet, &mFdSet, sizeof(fd_set));
+    int ret = select(mMaxsock + 1, &tempSet, (fd_set *)0, (fd_set *)0, (timeval *)0);
+    if (ret < 0)
+    {
+        perror("[ERROR] npSelect :");
+        return -1;
+    }
+    return ret;
+}
+
+void NpSocket::npFdSet(int fd)
+{
+    FD_SET(fd, &mFdSet);
+}
+
+void NpSocket::npFdClr(int fd)
+{
+    FD_CLR(fd, &mFdSet);
+}
+
+int NpSocket::npFdIsSet(int fd)
+{
+    return FD_ISSET(fd, &mFdSet);
+}
+
+int NpSocket::ssock()
+{
+    return mSsock;
+}
+
+int NpSocket::csock()
+{
+    return mCsock;
+}
+
+int NpSocket::sport()
+{
+    return mSport;
+}
+
+int NpSocket::maxsock()
+{
+    return mMaxsock;
+}

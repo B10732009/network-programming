@@ -62,5 +62,6 @@ class NpShell
 
   public:
     NpShell(int _sock);
-    void npRun(std::string str);
+    ~NpShell();
+    bool npRun(std::string str);
 };
