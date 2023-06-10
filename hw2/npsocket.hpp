@@ -16,11 +16,10 @@
 class NpSocket
 {
   private:
-    int mSsock;
-    int mCsock;
-    int mSport;
-    int mMaxsock;
-    fd_set mFdSet;
+    int mSsock;    // server socket
+    int mSport;    // server port
+    int mMaxsock;  // max used socket number
+    fd_set mFdSet; // socket set (server + client)
 
   public:
     NpSocket() = delete;
@@ -32,7 +31,6 @@ class NpSocket
     int npFdIsSet(int fd);
 
     int ssock();
-    int csock();
     int sport();
     int maxsock();
 };

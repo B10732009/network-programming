@@ -68,7 +68,7 @@ int main(int argc, char *argv[], char *envp[])
     {
         int sock, port;
         std::string addr;
-        while (npsocket.npAccept(sock, addr, port))
+        while (!npsocket.npAccept(sock, addr, port))
             ;
 
         pid_t pid = fork();
@@ -87,7 +87,7 @@ int main(int argc, char *argv[], char *envp[])
             if (dup2(sock, 2) < 0)
                 perror("[ERROR] dup stderr :");
 
-            NpShell npshell(sock);
+            NpShell npshell;
             while (true)
             {
                 std::cout << "% " << std::flush; // use std::flush to force to print the string
@@ -107,7 +107,7 @@ int main(int argc, char *argv[], char *envp[])
                     }
                 }
                 // run command
-                if (!npshell.npRun(cmd))
+                if (!(npshell.npRun(cmd)))
                     exit(0);
             }
             exit(1);

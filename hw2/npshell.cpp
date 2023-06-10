@@ -251,7 +251,6 @@ void NpShell::npPrintenv(std::string var)
     char *env = getenv(var.c_str());
     if (env)
         std::cout << env << std::endl;
-    // npWrite(sock, env);
 }
 
 void NpShell::npExec(std::vector<std::string> cmds)
@@ -313,7 +312,7 @@ void NpShell::npWrite(int fd, std::string str)
         perror("[ERROR] write :");
 }
 
-NpShell::NpShell(int _sock) : sock(_sock)
+NpShell::NpShell()
 {
     npSetenv("PATH", "bin:.");
 }

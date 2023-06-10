@@ -16,7 +16,6 @@
 #include "user.hpp"
 
 std::vector<User> userList;
-std::vector<User> *User::mUserListPtr = &userList;
 
 std::string getRead(int sock)
 {
@@ -184,7 +183,6 @@ int main(int argc, char *argv[], char *envp[])
                         std::string t, tid;
                         ss << cmd;
                         ss >> t >> tid;
-                        // std::cerr << t << " " << tid << std::endl;
                         tell(userList[i].id(), std::stoi(tid), cmd.substr(6 + tid.size()));
                     }
                     else if (cmd.substr(0, 4) == "yell")

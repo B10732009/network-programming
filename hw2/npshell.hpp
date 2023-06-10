@@ -48,7 +48,6 @@ class NpShell
   private:
     std::vector<Proc> procList;
     std::vector<Numpipe> numpipeList;
-    int sock;
 
     void npParse(std::vector<Cmd> &cmds, std::string str);
     void npSetenv(std::string var, std::string value);
@@ -61,7 +60,7 @@ class NpShell
     void npWrite(int fd, std::string str);
 
   public:
-    NpShell(int _sock);
+    NpShell();
     ~NpShell();
     bool npRun(std::string str);
 };

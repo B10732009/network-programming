@@ -8,35 +8,23 @@
 class User
 {
   private:
-    int mId;
-    std::string mName;
-    int mSock;
-    std::string mAddr;
-    int mPort;
-
-    NpShell mNpshell;
-
-    static int mMaxSock;
-    static std::vector<int> mSockList;
-    static std::vector<bool> mIdList;
-
-    void userWho();
-    void userTell(int id);
-    void userYell();
-    void userName(std::string name);
+    int mId;                          // user id
+    int mSock;                        // user socket
+    int mPort;                        // user port
+    std::string mAddr;                // user address
+    std::string mName;                // user name
+    NpShell mNpshell;                 // independent npshell
+    static std::vector<bool> mIdList; // record if the id is being used
 
   public:
-    static std::vector<User> *mUserListPtr;
-
     User() = delete;
     User(std::string _name, int _sock, std::string _addr, int _port);
     bool run(std::string str);
 
     int id();
-    std::string name();
     int sock();
-    std::string addr();
     int port();
-
+    std::string addr();
+    std::string name();
     void setName(std::string name);
 };
